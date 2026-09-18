@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Content Security Policy: no inline scripts or eval (wasm-unsafe-eval only allows the Arabic text-shaping WebAssembly), resources only from known origins -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://demotiles.maplibre.org https://server.arcgisonline.com https://flagcdn.com https://cdn.jsdelivr.net; worker-src 'self' blob:; child-src blob:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>GeoScope · Globe &amp; map trainer for GeoGuessr</title>
+  <meta name="description" content="Interactive 3D globe and 2D map with country directory, flag, calling-code, currency, fact and population overlays, plus live country chat rooms, for GeoGuessr players.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='%23fff' stroke='%231A73E8' stroke-width='3'/%3E%3Cpath d='M16 3v26M3 16h26M7 8c5 4 13 4 18 0M7 24c5-4 13-4 18 0' fill='none' stroke='%231A73E8' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Noto+Sans+Arabic:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="vendor/maplibre-gl.css">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="js/theme-init.js"></script>
+</head>
+<body>
+  <!-- Animated constellation background (always behind the map) -->
+  <canvas id="constellation" aria-hidden="true"></canvas>
+
+  <!-- Soft shadow under the globe (EARTH mode, satellite off) -->
+  <div id="globeShadow" class="globe-shadow" aria-hidden="true" hidden></div>
+
+  <!-- Map / globe -->
+  <div id="map" role="application" aria-label="Interactive world globe"></div>
+
+  <!-- Top-centre view controls -->
+  <nav class="viewbar" aria-label="View controls">
+    <label class="viewbar__lang" for="langSelect" data-i18n-title="language">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c3.2 3.6 3.2 14.4 0 18M12 3c-3.2 3.6-3.2 14.4 0 18" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+      <select id="langSelect" class="viewbar__select" aria-label="Language">
+        <option value="en">English</option>
+        <option value="ar">العربية</option>
+        <option value="fr">Français</option>
+        <option value="es">Español</option>
+      </select>
+    </label>
+    <span class="viewbar__sep" aria-hidden="true"></span>
+    <button type="button" class="viewbar__btn is-active" data-view="earth" aria-pressed="true" data-i18n="earth">Earth</button>
+    <span class="viewbar__sep" aria-hidden="true"></span>
+    <button type="button" class="viewbar__btn" data-view="map" aria-pressed="false" data-i18n="map">Map</button>
+    <span class="viewbar__sep" aria-hidden="true"></span>
+    <label class="viewbar__toggle" for="satToggle">
+      <span class="viewbar__toggle-text" data-i18n="satellite">Satellite</span>
+      <input type="checkbox" id="satToggle" class="switch__input">
+      <span class="switch" aria-hidden="true"></span>
+    </label>
+    <span class="viewbar__sep" aria-hidden="true"></span>
+    <label class="viewbar__toggle viewbar__toggle--dark" for="darkToggle" data-i18n-title="darkMode">
+      <svg class="viewbar__moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      <span class="viewbar__toggle-text" data-i18n="dark">Dark</span>
+      <input type="checkbox" id="darkToggle" class="switch__input">
+      <span class="switch switch--dark" aria-hidden="true"></span>
+    </label>
+  </nav>
+
+  <!-- Left column: overlay selector + country chat -->
+  <div class="left-col" id="leftCol">
+    <aside class="panel panel--left" id="overlayPanel" aria-label="Overlay mode">
+      <button type="button" class="panel__handle panel__handle--left" id="overlayToggle" aria-label="Collapse overlay panel" aria-expanded="true">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <header class="panel__head">
+        <h2 class="panel__title" data-i18n="overlay">Overlay</h2>
+        <span class="panel__hint" data-i18n="oneAtATime">one at a time</span>
+      </header>
+
+      <div class="overlay-list" role="radiogroup" aria-label="Overlay mode">
+        <label class="overlay-opt">
+          <input type="radio" name="overlay" value="none" checked>
+          <span class="overlay-opt__radio" aria-hidden="true"></span>
+          <span class="overlay-opt__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+          </span>
+          <span class="overlay-opt__text"><b data-i18n="optNone">None</b><small data-i18n="optNoneSub">Names only</small></span>
+        </label>
+        <label class="overlay-opt">
+          <input type="radio" name="overlay" value="flag">
+          <span class="overlay-opt__radio" aria-hidden="true"></span>
+          <span class="overlay-opt__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M5 21V4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 4h12l-2.5 4L17 12H5" fill="currentColor" opacity=".9"/></svg>
+          </span>
+          <span class="overlay-opt__text"><b data-i18n="optFlag">Flag</b><small data-i18n="optFlagSub">Flag-filled countries</small></span>
+        </label>
+        <label class="overlay-opt">
+          <input type="radio" name="overlay" value="calling">
+          <span class="overlay-opt__radio" aria-hidden="true"></span>
+          <span class="overlay-opt__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M6.6 3.5h3l1.6 4.2-2.1 1.4a11 11 0 0 0 5.8 5.8l1.4-2.1 4.2 1.6v3a2 2 0 0 1-2.2 2A15.5 15.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="overlay-opt__text"><b data-i18n="optCalling">Calling code</b><small data-i18n="optCallingSub">+34, +32, +1 …</small></span>
+        </label>
+        <label class="overlay-opt">
+          <input type="radio" name="overlay" value="currency">
+          <span class="overlay-opt__radio" aria-hidden="true"></span>
+          <span class="overlay-opt__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M14.5 9.2A3 3 0 0 0 9.5 10c0 2 5 1.5 5 4a3 3 0 0 1-5 1M12 6.5v2M12 15.5v2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </span>
+          <span class="overlay-opt__text"><b data-i18n="optCur">Currency</b><small data-i18n="optCurSub">€ Euro, $ US Dollar …</small></span>
+        </label>
+        <label class="overlay-opt">
+          <input type="radio" name="overlay" value="fact">
+          <span class="overlay-opt__radio" aria-hidden="true"></span>
+          <span class="overlay-opt__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.7.6 1 1.3 1 2.1h5c0-.8.3-1.5 1-2.1A6 6 0 0 0 12 3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="overlay-opt__text"><b data-i18n="optFact">Learn a fact</b><small data-i18n="optFactSub">Hover a country</small></span>
+        </label>
+        <label class="overlay-opt">
+          <input type="radio" name="overlay" value="population">
+          <span class="overlay-opt__radio" aria-hidden="true"></span>
+          <span class="overlay-opt__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="16.5" cy="9.5" r="2.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M14 18.5a4 4 0 0 1 6.5-2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </span>
+          <span class="overlay-opt__text"><b data-i18n="optPop">Population</b><small data-i18n="optPopSub">1990 → 2026 timeline</small></span>
+        </label>
+      </div>
+
+      <!-- Population timeline (visible only in Population mode) -->
+      <section class="timeline" id="timeline" hidden aria-label="Population year">
+        <div class="timeline__head">
+          <span class="timeline__label" data-i18n="year">Year</span>
+          <output class="timeline__year" id="yearOut" for="yearSlider">2026</output>
+        </div>
+        <div class="timeline__track">
+          <input type="range" id="yearSlider" min="1990" max="2026" step="1" value="2026" aria-label="Population year">
+        </div>
+        <div class="timeline__ticks" aria-hidden="true">
+          <span>1990</span><span>2002</span><span>2014</span><span>2026</span>
+        </div>
+        <div class="timeline__world">
+          <span data-i18n="worldPop">World population</span>
+          <b id="worldPop">–</b>
+        </div>
+        <p class="timeline__note" id="popNote"></p>
+      </section>
+    </aside>
+
+    <!-- Country chat (Supabase) -->
+    <section class="panel panel--chat" id="chatPanel" aria-label="Country chat">
+      <header class="chat__head">
+        <span class="chat__flag" id="chatFlag" aria-hidden="true"></span>
+        <h2 class="chat__room" id="chatRoom" data-i18n="chatTitle">Live chat</h2>
+        <span class="chat__online" id="chatOnline"><i aria-hidden="true"></i><b>0</b></span>
+        <button type="button" class="chat__min" id="chatMin" aria-label="Minimise chat" data-i18n-aria="chatMinimise" aria-expanded="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </header>
+      <div class="chat__body" id="chatBody">
+        <p class="chat__hint" id="chatHint" data-i18n="chatSelectCountry">Select a country to join its chat room. Everyone can read; sign in to write.</p>
+        <ul class="chat__list" id="chatList" role="log" aria-live="polite" hidden></ul>
+      </div>
+      <footer class="chat__foot">
+        <button type="button" class="chat__google" id="chatSignIn">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.4z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.4 14a6 6 0 0 1 0-3.9V7.5H3.1a10 10 0 0 0 0 9z"/><path fill="#EA4335" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 3.1 7.5l3.3 2.6C7.2 7.8 9.4 6 12 6z"/></svg>
+          <span data-i18n="chatSignIn">Sign in with Google to chat</span>
+        </button>
+        <form class="chat__form" id="chatForm" hidden autocomplete="off">
+          <img class="chat__me" id="chatMe" alt="" width="28" height="28" referrerpolicy="no-referrer" hidden>
+          <input type="text" id="chatInput" class="chat__input" maxlength="500" autocomplete="off" spellcheck="true" placeholder="Message…" aria-label="Message">
+          <button type="submit" class="chat__send" id="chatSend" aria-label="Send" data-i18n-aria="chatSend">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 11.5L20 4l-7.5 17-1.8-7.2L3 11.5z" fill="currentColor"/></svg>
+          </button>
+          <button type="button" class="chat__out" id="chatSignOut" aria-label="Sign out" data-i18n-aria="chatSignOut" data-i18n-title="chatSignOut">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M10 4H5v16h5M14 8l4 4-4 4M8 12h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </form>
+        <p class="chat__status" id="chatStatus" role="status" hidden></p>
+      </footer>
+    </section>
+  </div>
+
+  <!-- Right panel: country directory -->
+  <aside class="panel panel--right" id="dirPanel" aria-label="Country directory">
+    <button type="button" class="panel__handle panel__handle--right" id="dirToggle" aria-label="Collapse country list" aria-expanded="true">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <header class="panel__head">
+      <h2 class="panel__title" data-i18n="countries">Countries</h2>
+      <span class="panel__count" id="dirCount">0</span>
+    </header>
+    <form class="search" id="dirForm" role="search" autocomplete="off">
+      <svg class="search__icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input type="search" id="dirSearch" class="search__input" placeholder="Search countries…" data-i18n-placeholder="searchPlaceholder" maxlength="60" autocomplete="off" spellcheck="false" aria-label="Search countries">
+      <button type="button" class="search__clear" id="dirClear" aria-label="Clear search" data-i18n-aria="clearSearch" hidden>×</button>
+    </form>
+    <ul class="dir" id="dirList" role="listbox" aria-label="All countries A to Z"></ul>
+    <p class="dir__empty" id="dirEmpty" data-i18n="noMatch" hidden>No country matches that search.</p>
+  </aside>
+
+  <!-- Hover / selection card -->
+  <div class="infocard" id="infoCard" hidden>
+    <div class="infocard__head">
+      <span class="infocard__flag" id="cardFlag"></span>
+      <span class="infocard__name" id="cardName"></span>
+      <span class="infocard__iso" id="cardIso"></span>
+    </div>
+    <div class="infocard__body" id="cardBody"></div>
+  </div>
+
+  <!-- Room switch confirmation -->
+  <div class="modal" id="roomModal" role="dialog" aria-modal="true" aria-labelledby="roomModalTitle" hidden>
+    <div class="modal__card">
+      <h3 class="modal__title" id="roomModalTitle" data-i18n="switchTitle">Switch chat room?</h3>
+      <p class="modal__text" id="roomModalText"></p>
+      <p class="modal__note" data-i18n="switchDisclaimer">Switching rooms will connect you to chat members currently viewing this country (they are not required to be residents of this country).</p>
+      <div class="modal__actions">
+        <button type="button" class="btn btn--ghost" id="roomStay" data-i18n="stay">Stay</button>
+        <button type="button" class="btn btn--primary" id="roomSwitch" data-i18n="switchRoom">Switch Room</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live site visitors (Supabase Presence) -->
+  <div class="visitors" id="visitors" role="status" aria-live="polite" hidden>
+    <i class="visitors__dot" aria-hidden="true"></i>
+    <b id="visitorsCount">1</b>
+    <span data-i18n="visitors">live visitors</span>
+  </div>
+
+  <!-- Footer credit -->
+  <a class="credit" id="creditLink" href="#" target="_blank" rel="noopener noreferrer">
+    <span data-i18n="createdBy">created by</span> <b>SOFi!BOU</b>
+  </a>
+
+  <!-- Transient status toast -->
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- Loading screen -->
+  <div class="loader" id="loader">
+    <div class="loader__globe"></div>
+    <div class="loader__text" data-i18n="preparing">Preparing the globe…</div>
+  </div>
+
+  <script src="vendor/maplibre-gl.js"></script>
+  <script src="vendor/topojson-client.min.js"></script>
+  <script src="vendor/supabase.js"></script>
+  <script src="js/config.js"></script>
+  <script src="data/world-topo.js"></script>
+  <script src="data/countries.js"></script>
+  <script src="data/facts.js"></script>
+  <script src="data/facts.fr.js"></script>
+  <script src="data/facts.es.js"></script>
+  <script src="data/facts.ar.js"></script>
+  <script src="js/i18n.js"></script>
+  <script src="js/constellation.js"></script>
+  <script src="js/geo.js"></script>
+  <script src="js/chat.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+# local Supabase config is generated per environment; keep only the example in git
+js/config.js
+tools/raw/

@@ -431,6 +431,9 @@ button { cursor: pointer; }
 .chat__msg { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border-radius: 10px; }
 .chat__msg:hover { background: var(--hover-bg); }
 .chat__msg.is-own .chat__meta b { color: var(--blue); }
+.chat__msg.is-pending { opacity: .6; }
+.chat__msg.is-pending .chat__text::after { content: " ·"; color: var(--ink-3); animation: pending-pulse 1s ease-in-out infinite; }
+@keyframes pending-pulse { 50% { opacity: .3; } }
 .chat__avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--chip); color: var(--ink-2); font-size: 12px; font-weight: 700; display: grid; place-items: center; overflow: hidden; flex: none; }
 .chat__avatar img { width: 26px; height: 26px; display: block; object-fit: cover; }
 .chat__main { flex: 1 1 auto; min-width: 0; }

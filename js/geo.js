@@ -271,11 +271,34 @@ window.Geo = (function () {
     return [[b[0], b[1]], [b[2], b[3]]];
   }
 
+  // Matches by country name (any language), ISO code, capital (any language),
+  // calling code (digits, leading "+" stripped) and currency (code / name / symbol).
   function search(q, lang) {
-    const s = strip(q).trim();
+    const raw = (q || '').trim();
+    const s = strip(raw);
     if (!s) return countries;
-    return countries.filter(c => strip(name(c, lang)).includes(s) || strip(c.n).includes(s) || strip(c.o).includes(s)
-      || c.a2.toLowerCase() === s || c.a3.toLowerCase() === s || (c.cap && strip(c.cap).includes(s)));
+    const has = (v) => v && strip(v).includes(s);
+    // treat a query of digits/+/spaces as a phone-code search, compared on digits only
+    const qDigits = raw.replace(/[^\d]/g, '');
+    const phoneQuery = qDigits && /^[+\d\s().-]+$/.test(raw);
+    return countries.filter(c => {
+      // names: current language, English common + official, and every translation
+      if (has(name(c, lang)) || has(c.n) || has(c.o) || has(c.nf) || has(c.ns) || has(c.na)) return true;
+      // ISO codes
+      if (c.a2.toLowerCase() === s || c.a3.toLowerCase() === s) return true;
+      // capitals in every language
+      if (has(c.cap) || has(c.capf) || has(c.caps) || has(c.capa)) return true;
+      // currency: code (EUR), name (Euro / United States dollar) and symbol (€, $, £)
+      if (c.cur && (has(c.cur.c) || has(c.cur.n) || has(c.cur.s))) return true;
+      // calling code: "+34", "34" and "+32" all match. A numeric query is matched by digit
+      // prefix (so "34" gives Spain, not every code that merely contains 34); otherwise the
+      // raw "+34" text is matched directly.
+      if (c.cc) {
+        if (phoneQuery) { if (c.cc.replace(/\D/g, '').startsWith(qDigits)) return true; }
+        else if (has(c.cc)) return true;
+      }
+      return false;
+    });
   }
   function sorted(lang) {
     if (!lang || lang === 'en') return countries;

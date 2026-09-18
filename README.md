@@ -36,6 +36,23 @@ box. The room follows the selected country; if you are already in a room, a **St
 dialog asks first. The header shows how many people are subscribed to the room (Supabase Presence),
 and the bottom-centre pill counts every open tab on the site, signed in or not.
 
+### Delivery is location-independent
+
+There is no IP or geolocation logic anywhere — a room is a global Supabase Realtime channel
+(`chat:<CC>`) that any signed-in user can post to from anywhere, and every subscriber receives every
+message (RLS permitting). Switching rooms explicitly unsubscribes the old channel and subscribes the
+new one. Two resilience layers keep it working for users whose Realtime WebSocket is slow or blocked
+(common on some international / mobile networks):
+
+- **Sending never uses the WebSocket.** Messages are inserted through the `send_message` RPC, an
+  HTTPS/REST call, so a send works even with the socket down. (A direct `from('messages').insert()`
+  would be rejected — RLS has no INSERT policy, by design; the RPC is the sanctioned REST insert.)
+- **REST polling fallback for receiving.** If the room's channel errors, times out, closes, or has
+  not joined within a few seconds, the client polls the messages table over REST every 3 s for rows
+  newer than the last one seen, so messages still arrive. When the socket (re)connects it becomes
+  primary again and polling stops. Incoming messages are de-duplicated by id, so the two paths never
+  double up.
+
 ### Setup (once)
 
 1. Create a Supabase project. In **Authentication → Providers** enable **Google** and add your site

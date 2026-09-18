@@ -14,6 +14,8 @@ window.Chat = (function () {
   const MAX_LEN = 500;
   const HISTORY = 100;
   const SEND_INTERVAL = 1000;
+  const POLL_INTERVAL = 3000;   // REST fallback: how often to poll a room for new messages
+  const WS_WATCHDOG = 3500;     // if the realtime socket has not joined by now, start polling anyway
   const $ = s => document.querySelector(s);
 
   const cfg = window.GEO_CONFIG || {};
@@ -30,6 +32,10 @@ window.Chat = (function () {
   let pending = null;      // country awaiting the switch confirmation
   let roomChannel = null;
   let siteChannel = null;
+  let roomPoll = null;     // REST polling interval handle (fallback when realtime is unavailable)
+  let lastMsgId = 0;       // highest message id seen in the current room, for incremental polling
+  let wsJoined = false;    // whether the realtime channel for the current room is subscribed
+  let joinToken = 0;       // bumped on every join() so stale async callbacks bail out
   let online = 0;
   let lastSent = 0;
   let minimized = false;
@@ -180,13 +186,16 @@ window.Chat = (function () {
     scrollToEnd();
   }
   function scrollToEnd() { el.list.scrollTop = el.list.scrollHeight; }
+  function idNum(v) { return typeof v === 'number' ? v : (/^\d+$/.test(String(v)) ? parseInt(v, 10) : 0); }
+  function noteId(m) { const n = idNum(m.id); if (n > lastMsgId) lastMsgId = n; }
   function appendMessage(m) {
-    if (messages.some(x => x.id === m.id)) return;
+    if (messages.some(x => x.id === m.id)) { noteId(m); return; }
     // realtime echo of a message we already showed optimistically: adopt the real id instead of adding a duplicate
     if (user && m.user_id === user.id) {
       const p = pendingSends.find(x => x.body === m.body);
       if (p) { confirmSend(p.tempId, m.id, m.created_at); return; }
     }
+    noteId(m);
     messages.push(m);
     if (messages.length > 400) messages.splice(0, messages.length - 400);
     const empty = el.list.querySelector('.chat__empty');
@@ -225,11 +234,35 @@ window.Chat = (function () {
     if (i < 0) return;
     const p = pendingSends[i];
     p.msg.id = realId;
+    noteId(p.msg);
     if (createdAt) { p.msg.created_at = createdAt; const time = p.node.querySelector('time'); if (time) { time.dateTime = createdAt; time.textContent = timeLabel(createdAt); } }
     p.node.dataset.id = String(realId);
     p.node.classList.remove('is-pending');
     pendingSends.splice(i, 1);
   }
+
+  // ---------- REST polling fallback ----------
+  // International users whose WebSocket to Supabase Realtime is slow or blocked still receive
+  // messages by polling the messages table over HTTPS (same REST endpoint the history load uses).
+  // Polling runs only while realtime is not subscribed; it fetches rows newer than lastMsgId.
+  async function pollOnce(a2, token) {
+    if (!configured || !room || room.a2 !== a2 || token !== joinToken) return;
+    try {
+      const { data, error } = await sb.from('messages')
+        .select('id,country,user_id,author_name,author_avatar,body,created_at')
+        .eq('country', a2).gt('id', lastMsgId)
+        .order('id', { ascending: true }).limit(200);
+      if (error) throw error;
+      if (!room || room.a2 !== a2 || token !== joinToken) return;
+      (data || []).forEach(appendMessage);
+    } catch (e) { /* transient network error; the next tick retries */ }
+  }
+  function startPolling(a2, token) {
+    if (roomPoll || token !== joinToken) return;
+    roomPoll = setInterval(() => pollOnce(a2, token), POLL_INTERVAL);
+    pollOnce(a2, token);   // fetch immediately, don't wait a whole interval
+  }
+  function stopPolling() { if (roomPoll) { clearInterval(roomPoll); roomPoll = null; } }
   function failSend(tempId) {
     const i = pendingSends.findIndex(x => x.tempId === tempId);
     if (i < 0) return;
@@ -242,40 +275,62 @@ window.Chat = (function () {
   // ---------- rooms ----------
   async function join(country) {
     if (!configured || !country || !CC_OK.test(country.a2)) return;
+    // explicitly leave the previous room: stop polling and unsubscribe its realtime channel
+    stopPolling();
     if (roomChannel) { try { await sb.removeChannel(roomChannel); } catch (e) { /* ignore */ } roomChannel = null; }
+    const token = ++joinToken;
+    const a2 = country.a2;
     room = country;
-    messages.length = 0; pendingSends.length = 0; online = 0;
+    messages.length = 0; pendingSends.length = 0; online = 0; lastMsgId = 0; wsJoined = false;
     renderHeader(); renderAuth(); renderList();
     status(t('chatConnecting'));
-    const a2 = country.a2;
+
+    // 1) load recent history over REST (works regardless of the websocket)
     try {
       const { data, error } = await sb.from('messages')
         .select('id,country,user_id,author_name,author_avatar,body,created_at')
         .eq('country', a2).order('id', { ascending: false }).limit(HISTORY);
       if (error) throw error;
-      if (room !== country) return;
+      if (token !== joinToken) return;   // a newer room was joined meanwhile
       messages.length = 0;
-      (data || []).reverse().forEach(m => messages.push(m));
+      (data || []).reverse().forEach(m => { messages.push(m); noteId(m); });
       renderList();
       status('');
     } catch (e) {
-      status(errorKey(e), 'error');
+      if (token === joinToken) status(errorKey(e), 'error');
     }
-    roomChannel = sb.channel('room:' + a2, { config: { presence: { key: sessionKey } } })
+    if (token !== joinToken) return;
+
+    // 2) subscribe to this room's realtime channel: chat:<CC>. No IP/origin restriction — the
+    //    channel is global; every subscriber gets every INSERT for this country (RLS permitting).
+    roomChannel = sb.channel('chat:' + a2, { config: { presence: { key: sessionKey } } })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: 'country=eq.' + a2 },
         payload => { if (room && payload.new && payload.new.country === room.a2) appendMessage(payload.new); })
       .on('presence', { event: 'sync' }, () => {
+        if (!roomChannel) return;
         online = Object.keys(roomChannel.presenceState()).length;
         el.online.querySelector('b').textContent = String(online);
         el.online.title = t('chatOnline', { n: online });
       })
       .subscribe(async st => {
+        if (token !== joinToken) return;
         if (st === 'SUBSCRIBED') {
+          wsJoined = true;
+          stopPolling();                 // realtime is primary; drop the REST fallback
+          pollOnce(a2, token);           // one catch-up read for anything missed while connecting
+          status('');
           try { await roomChannel.track({ at: new Date().toISOString(), uid: user ? user.id : null }); } catch (e) { /* ignore */ }
-        } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') {
-          status(t('chatError'), 'error');
+        } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') {
+          // websocket failed or dropped (common for some international/mobile networks):
+          // fall back to REST polling so messages still flow, without alarming the user.
+          wsJoined = false;
+          startPolling(a2, token);
         }
       });
+
+    // 3) watchdog: if the socket has not joined shortly, start polling anyway so reception is
+    //    never blocked by a slow or blocked websocket handshake.
+    setTimeout(() => { if (token === joinToken && !wsJoined) startPolling(a2, token); }, WS_WATCHDOG);
   }
 
   function requestRoom(country) {
@@ -314,6 +369,7 @@ window.Chat = (function () {
       if (error) throw error;
       if (data != null) confirmSend(tempId, data);     // real id from send_message()
       else { const p = pendingSends.find(x => x.tempId === tempId); if (p) { p.node.classList.remove("is-pending"); pendingSends.splice(pendingSends.indexOf(p), 1); } }
+      if (!wsJoined && room && room.a2 === roomA2) pollOnce(roomA2, joinToken);   // no socket: pull any concurrent messages now
     } catch (err) {
       failSend(tempId);       // roll the optimistic bubble back on failure
       lastSent = 0;           // let the user retry straight away

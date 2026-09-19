@@ -4,3 +4,10 @@
 
 [build.environment]
   NODE_VERSION = "18"
+
+[[redirects]]
+  from = "https://geoscope-91wm.netlify.app/*"
+    to = "https://geoscope.live/:splat"
+      status = 301
+        force = true
+        

@@ -31,13 +31,14 @@
     const ch = {
       name, key: cfg && cfg.config && cfg.config.presence ? cfg.config.presence.key : 'anon', handlers: [], tracked: false, state: 'closed',
       on(type, filter, cb) { ch.handlers.push({ type, filter, cb }); return ch; },
-      subscribe(cb) { ch.state = 'joined'; channels.push(ch); setTimeout(() => cb && cb('SUBSCRIBED'), 30); return ch; },
+      subscribe(cb) { channels.push(ch); setTimeout(() => { if (window.__mockWsFail) { ch.state = 'errored'; cb && cb('CHANNEL_ERROR'); } else { ch.state = 'joined'; cb && cb('SUBSCRIBED'); } }, 30); return ch; },
       async track() { ch.tracked = true; ch.handlers.filter(h => h.type === 'presence').forEach(h => h.cb()); },
       presenceState() { return presenceFor(ch); },
     };
     return ch;
   }
   function broadcastInsert(row) {
+    if (window.__mockWsFail) return;   // simulate a dead websocket: only REST polling will surface the row
     channels.forEach(ch => ch.handlers.filter(h => h.type === 'postgres_changes' && h.filter.filter === 'country=eq.' + row.country).forEach(h => h.cb({ new: row })));
   }
 
@@ -53,10 +54,19 @@
       async signOut() { user = null; emitAuth('SIGNED_OUT'); return { error: null }; },
     },
     from(table) {
-      const q = { _a2: null, _limit: 100 };
-      q.select = () => q; q.order = () => q; q.limit = n => { q._limit = n; return q; };
+      const q = { _a2: null, _limit: 100, _gtId: null, _asc: false };
+      q.select = () => q;
+      q.order = (col, opt) => { if (col === 'id' && opt) q._asc = !!opt.ascending; return q; };
+      q.limit = (n) => { q._limit = n; return q; };
       q.eq = (col, v) => { if (col === 'country') q._a2 = v; return q; };
-      q.then = (res, rej) => Promise.resolve({ data: table === 'messages' ? seed(q._a2).slice(-q._limit).reverse() : [], error: null }).then(res, rej);
+      q.gt = (col, v) => { if (col === 'id') q._gtId = v; return q; };
+      q.then = (res, rej) => {
+        let rows = table === 'messages' ? seed(q._a2).slice() : [];
+        if (q._gtId != null) rows = rows.filter(r => r.id > q._gtId);
+        rows.sort((a, b) => a.id - b.id);
+        rows = q._asc ? rows.slice(0, q._limit) : rows.slice(-q._limit).reverse();
+        return Promise.resolve({ data: rows, error: null }).then(res, rej);
+      };
       return q;
     },
     async rpc(fn, args) {

@@ -492,8 +492,8 @@ button { cursor: pointer; }
 .visitors b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .visitors__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px rgba(52, 168, 83, 0.2); animation: pulse-dot 2s infinite; }
 @keyframes pulse-dot { 50% { box-shadow: 0 0 0 6px rgba(52, 168, 83, 0.08); } }
+.footer-credits { position: fixed; left: var(--gap); bottom: 14px; z-index: 14; display: flex; align-items: center; gap: 8px; }
 .credit {
-  position: fixed; left: var(--gap); bottom: 14px; z-index: 14;
   font-size: 12px; color: var(--ink-3); text-decoration: none;
   padding: 6px 10px; border-radius: 8px;
   background: var(--panel-glass); border: 1px solid var(--panel-border);
@@ -503,7 +503,45 @@ button { cursor: pointer; }
 .credit:hover { color: var(--ink-2); }
 .credit:hover b { color: var(--blue); }
 .credit:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-.maplibregl-ctrl-bottom-left { left: calc(var(--gap) + 152px); bottom: 14px; }
+/* Discord footer link — muted like the credit, brand blurple on hover, adapts to light/dark */
+.discord-link {
+  display: grid; place-items: center; width: 34px; height: 34px; flex: none;
+  color: var(--ink-2); text-decoration: none;
+  border-radius: 8px; background: var(--panel-glass); border: 1px solid var(--panel-border);
+  transition: color .2s var(--ease), background-color .35s var(--ease), transform .15s var(--ease);
+}
+.discord-link svg { width: 18px; height: 18px; }
+.discord-link:hover { color: #5865F2; }
+.discord-link:active { transform: scale(0.94); }
+.discord-link:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+/* First-sign-in spotlight onboarding (Discord) */
+.spotlight { position: fixed; inset: 0; z-index: 60; }
+.spotlight[hidden] { display: none; }
+.spotlight__hole {
+  position: fixed; border-radius: 50%; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(10, 12, 16, 0.62);
+  outline: 2px solid rgba(255, 255, 255, 0.85); outline-offset: 2px;
+}
+.spotlight__card {
+  position: fixed; max-width: min(300px, calc(100vw - 24px));
+  background: var(--panel); color: var(--ink);
+  border-radius: 14px; box-shadow: var(--shadow); border: 1px solid var(--panel-border);
+  padding: 16px; animation: rise .25s var(--ease);
+}
+.spotlight__icon { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: #fff; background: #5865F2; margin-bottom: 10px; }
+.spotlight__text { margin: 0 0 14px; font-size: 14px; line-height: 1.45; color: var(--ink); }
+.spotlight__btn {
+  appearance: none; border: 0; background: #5865F2; color: #fff;
+  font-weight: 700; font-size: 14px; padding: 11px 18px; border-radius: 10px; cursor: pointer;
+  min-height: 44px; width: 100%;
+  transition: filter .15s var(--ease), transform .15s var(--ease);
+}
+.spotlight__btn:hover { filter: brightness(1.08); }
+.spotlight__btn:active { transform: scale(0.98); }
+.spotlight__btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* clear the footer credit + Discord icon cluster on the bottom-left */
+.maplibregl-ctrl-bottom-left { left: calc(var(--gap) + 200px); bottom: 14px; }
 
 /* ---------- RTL ---------- */
 [dir="rtl"] .viewbar__select { padding: 10px 4px 10px 24px; background-position: left 2px center; }
@@ -525,32 +563,129 @@ button { cursor: pointer; }
   .viewbar__toggle-text { font-size: 15px; }
   .viewbar__select { font-size: 14px; }
 }
-@media (max-width: 860px) {
+/* Tablet / narrow desktop (769–900px): shrunk desktop layout */
+@media (min-width: 769px) and (max-width: 900px) {
   :root { --gap: 12px; }
   .viewbar { top: 10px; padding: 4px 6px; border-radius: 12px; }
-  .viewbar__btn { padding: 8px 10px; font-size: 13px; }
-  .viewbar__toggle { padding: 8px 8px 8px 10px; gap: 8px; }
+  .viewbar__btn { padding: 9px 12px; font-size: 14px; }
+  .viewbar__toggle { padding: 9px 10px; gap: 8px; }
   .viewbar__toggle--dark .viewbar__toggle-text { display: none; }
-  .viewbar__toggle-text { font-size: 13px; }
-  .viewbar__select { font-size: 12px; padding-right: 20px; }
-  .switch { width: 40px; height: 22px; }
-  .switch::after { width: 16px; height: 16px; }
-  .switch__input:checked + .switch::after { transform: translateX(18px); }
+  .viewbar__toggle-text { font-size: 14px; }
+  .viewbar__select { font-size: 13px; padding-right: 22px; }
   .panel--right, .left-col { top: 64px; }
-  .left-col { width: 240px; }
-  .panel--right { width: 240px; }
-  .infocard { max-width: 240px; }
-  .credit { padding: 5px 8px; font-size: 11px; }
-  .maplibregl-ctrl-bottom-left { left: calc(var(--gap) + 132px); }
+  .left-col { width: 250px; }
+  .panel--right { width: 250px; }
 }
-@media (max-width: 600px) {
-  /* both panels stay open by default; keep them side by side instead of overlapping */
-  .left-col { width: 46vw; }
-  .panel--right { width: 46vw; }
-  .panel--left { max-height: 46vh; }
-  .overlay-opt__text small { display: none; }
-  .visitors { bottom: 52px; }
+
+.viewbar__mobicon { display: none; }
+
+/* ---------- Mobile: bottom tab bar + bottom sheets (≤768px) ---------- */
+@media (max-width: 768px) {
+  :root { --gap: 12px; --tabbar-h: 58px; --kb: 0px; }
+
+  /* Top control bar: compact single row with 44px targets; scrolls horizontally only if it must */
+  .viewbar {
+    top: max(8px, env(safe-area-inset-top)); padding: 2px 4px; border-radius: 12px; gap: 0;
+    max-width: calc(100vw - 12px); overflow-x: auto; overflow-y: hidden;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; flex-wrap: nowrap;
+  }
+  .viewbar::-webkit-scrollbar { display: none; }
+  .viewbar__sep { display: none; }
+  .viewbar__btn { padding: 11px 9px; font-size: 13.5px; min-height: 44px; }
+  .viewbar__lang { padding-inline: 4px 0; }
+  .viewbar__lang svg { display: none; }
+  .viewbar__select { font-size: 12.5px; padding: 11px 18px 11px 4px; min-height: 44px; max-width: 80px; }
+  .viewbar__toggle { min-height: 44px; padding: 8px 5px; gap: 5px; }
+  .viewbar__toggle .viewbar__toggle-text { display: none; }   /* icons + switches only, to save width */
+  .viewbar__mobicon { display: block; color: var(--grey); }
+  .viewbar__toggle.is-on .viewbar__mobicon { color: var(--green); }
+  .viewbar__toggle--dark.is-on .viewbar__moon { color: var(--blue); }
+  .switch { width: 38px; height: 22px; }
+  .switch::after { width: 16px; height: 16px; }
+  .switch__input:checked + .switch::after { transform: translateX(16px); }
+
+  /* The left column stops being a box; its two panels become independent bottom sheets */
+  .left-col { position: static; inset: auto; width: auto; transform: none !important; display: contents; }
+
+  /* Every floating panel becomes a full-width bottom sheet resting above the tab bar */
+  #overlayPanel, #chatPanel, .panel--right {
+    position: fixed; left: 0; right: 0; top: auto;
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    width: 100%; max-width: none; max-height: 74vh; min-height: 0; overflow: hidden;
+    border-radius: 18px 18px 0 0;
+    transform: translateY(115%);
+    transition: transform .3s var(--ease);
+    z-index: 40; box-shadow: 0 -10px 30px rgba(20, 30, 50, 0.16);
+  }
+  .panel__handle { display: none; }             /* sheets open/close via the tab bar */
+  .chat__min { display: none; }
+  body[data-sheet="overlay"] #overlayPanel,
+  body[data-sheet="chat"] #chatPanel,
+  body[data-sheet="dir"] .panel--right { transform: translateY(0); }
+
+  /* drag-handle affordance + room for it */
+  #overlayPanel::before, #chatPanel::before, .panel--right::before {
+    content: ""; position: absolute; top: 7px; left: 50%; transform: translateX(-50%);
+    width: 40px; height: 4px; border-radius: 2px; background: var(--track); z-index: 3;
+  }
+  .panel__head, .chat__head { padding-top: 18px; }
+  .overlay-opt__text small { display: block; }
+
+  /* Chat sheet: partial height so the map stays visible; raise it above the keyboard when typing */
+  body[data-sheet="chat"] #chatPanel { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--kb)); }
+  body.kb-open .mtabs { transform: translateY(110%); }
+  body.kb-open[data-sheet="chat"] #chatPanel { bottom: var(--kb); max-height: calc(100dvh - var(--kb) - 8px); }
+  .chat__input, .search__input { font-size: 16px; }   /* ≥16px stops iOS focus-zoom */
+
+  /* Bottom tab bar */
+  .mtabs {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+    height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--panel-glass); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid var(--panel-border);
+    transition: transform .3s var(--ease);
+  }
+  .mtab {
+    flex: 1 1 0; min-width: 0; min-height: 44px; border: 0; background: transparent;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    color: var(--ink-3); font-size: 11px; font-weight: 600; position: relative;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .mtab svg { width: 22px; height: 22px; }
+  .mtab.is-active { color: var(--blue); }
+  .mtab__badge { position: absolute; top: 7px; right: calc(50% - 19px); width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px var(--panel); }
+  .mtab__badge[hidden] { display: none; }
+
+  /* keep floating chrome clear of the tab bar, on separate lines so they never collide:
+     visitors on the upper line (centred), credit + attribution on the lower line (left / right) */
+  .visitors { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 44px); }
+  .footer-credits { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 8px); gap: 6px; }
+  .credit { font-size: 11px; padding: 5px 8px; }
+  .discord-link { width: 30px; height: 30px; }
+  /* attribution: a compact truncated pill bottom-right so it never overruns the footer */
+  .maplibregl-ctrl-bottom-left { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 8px); left: auto; right: var(--gap); }
+  .maplibregl-ctrl-attrib-button { display: none; }
+  .maplibregl-ctrl-attrib.maplibregl-compact { min-height: 0; padding: 2px 8px; border-radius: 8px; }
+  .maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-inner {
+    display: block !important; max-width: 42vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px;
+  }
+  body[data-sheet]:not([data-sheet="none"]) .footer-credits,
+  body[data-sheet]:not([data-sheet="none"]) .visitors,
+  body[data-sheet]:not([data-sheet="none"]) .maplibregl-ctrl-bottom-left { opacity: 0; pointer-events: none; }
+  .infocard { max-width: min(86vw, 320px); }
+
+  /* comfortable tap targets inside sheets */
+  .overlay-opt { padding: 12px 10px; }
+  .dir__item { padding: 12px; min-height: 44px; }
+  .chat__send { width: 44px; height: 44px; }
+  .chat__out, .search__clear { min-width: 40px; min-height: 40px; }
+  .chat__report { opacity: 1; padding: 8px 10px; }   /* no hover on touch: always visible */
+  .btn { min-height: 46px; }
+  .modal__card { border-radius: 16px 16px 0 0; align-self: flex-end; width: 100%; }
+  .modal { align-items: flex-end; padding: 0; }
 }
+
 @media (prefers-reduced-motion: reduce) {
   * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }

@@ -537,14 +537,23 @@
       if (opts.fly) flyToCountry(c);
       if (window.Chat) window.Chat.requestRoom(c);   // country chat room follows the selection
     }
+    try { document.dispatchEvent(new CustomEvent('geoscope:select', { detail: { id: id } })); } catch (e) { /* older browsers */ }
     refreshCard();
   }
   function flyToCountry(c) {
     const w = el.map.clientWidth;
-    let left = state.leftOpen ? 330 : 40, right = state.rightOpen ? 340 : 40;
-    if (left + right > w - 260) { left = 40; right = 40; }
+    let padding;
+    if (window.MobileUI && window.MobileUI.isMobile()) {
+      // phones: panels are bottom sheets, so pad top (control bar) and bottom (open sheet + tab bar)
+      const sheetOpen = document.body.getAttribute('data-sheet') && document.body.getAttribute('data-sheet') !== 'none';
+      padding = { top: 80, bottom: sheetOpen ? Math.round(el.map.clientHeight * 0.5) : 130, left: 24, right: 24 };
+    } else {
+      let left = state.leftOpen ? 330 : 40, right = state.rightOpen ? 340 : 40;
+      if (left + right > w - 260) { left = 40; right = 40; }
+      padding = { top: 100, bottom: 70, left, right };
+    }
     map.fitBounds(Geo.bounds(c), {
-      padding: { top: 100, bottom: 70, left, right },
+      padding: padding,
       maxZoom: c.area > 5e6 ? 3.6 : c.area > 5e5 ? 4.8 : c.area > 5e4 ? 5.8 : c.area > 2e3 ? 6.8 : 8,
       duration: 1500, essential: true,
     });
@@ -716,6 +725,7 @@
       applyOverlayText();
     }
     if (window.Chat) window.Chat.refreshLang();
+    try { document.dispatchEvent(new CustomEvent('geoscope:lang', { detail: { lang: l } })); } catch (e) { /* older browsers */ }
     refreshCard();
   }
   el.langSelect.addEventListener('change', () => setLang(el.langSelect.value));

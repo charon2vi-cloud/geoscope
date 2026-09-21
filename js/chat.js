@@ -273,6 +273,12 @@ window.Chat = (function () {
   }
 
   // ---------- rooms ----------
+  // Fire once a signed-in user has an active room (the moment they can actually chat).
+  // The onboarding module listens for this to show its one-time Discord tooltip.
+  function signalChatReady() {
+    if (user && room) { try { document.dispatchEvent(new CustomEvent('geoscope:chat-ready')); } catch (e) { /* older browsers */ } }
+  }
+
   async function join(country) {
     if (!configured || !country || !CC_OK.test(country.a2)) return;
     // explicitly leave the previous room: stop polling and unsubscribe its realtime channel
@@ -331,6 +337,8 @@ window.Chat = (function () {
     // 3) watchdog: if the socket has not joined shortly, start polling anyway so reception is
     //    never blocked by a slow or blocked websocket handshake.
     setTimeout(() => { if (token === joinToken && !wsJoined) startPolling(a2, token); }, WS_WATCHDOG);
+
+    signalChatReady();   // signed-in user now has a room → onboarding may run
   }
 
   function requestRoom(country) {
@@ -467,6 +475,7 @@ window.Chat = (function () {
       renderAuth();
       refreshStatus();
       if (roomChannel && roomChannel.state === 'joined') { roomChannel.track({ at: new Date().toISOString(), uid: user ? user.id : null }).catch(() => {}); }
+      if (event === 'SIGNED_IN') signalChatReady();   // signed in while already in a room → onboarding may run
     });
     sb.auth.getSession().then(({ data }) => { user = data && data.session ? data.session.user : null; renderAuth(); refreshStatus(); });
     joinSite();

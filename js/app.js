@@ -346,7 +346,13 @@
     applyTheme();
     hideLoader();
     updateGlobeShadow();
+    collapseAttribution();
   });
+  // The attribution control starts expanded; collapse it to just the (i) button on load so it does
+  // not occupy the footer. Clicking the (i) or hovering reveals the credits (handled in CSS).
+  function collapseAttribution() {
+    document.querySelectorAll('.maplibregl-ctrl-attrib.maplibregl-compact-show').forEach(e => e.classList.remove('maplibregl-compact-show'));
+  }
   setTimeout(hideLoader, 8000);
   map.on('error', e => {
     const msg = e && e.error && e.error.message ? e.error.message : '';

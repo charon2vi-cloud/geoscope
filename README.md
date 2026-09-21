@@ -26,8 +26,23 @@ and the chat backend is bundled locally.
 | **DARK** | Night theme (`#121212`, silver constellation, dark vector map). Remembered between visits. |
 | Left column | Overlay selector (**None / Flag / Calling code / Currency / Learn a fact / Population**) with the country chat underneath. |
 | Right panel | Searchable A–Z directory; click a country to fly to it. `/` focuses the search. |
-| Bottom | `created by SOFi!BOU` credit (left), live-visitor counter (centre). |
+| Bottom | `created by SOFi!BOU` credit and a **Discord** link (left), live-visitor counter (centre). |
 | Keys | `E` earth, `M` map, `S` satellite, `D` dark mode, `Esc` clears the selection. |
+
+### On phones (≤768px)
+
+The side panels are replaced by a **bottom tab bar** — Map / Overlay / Countries / Chat — where each
+tab opens its panel as a **bottom sheet** that slides up over a still-visible, still-interactive map;
+tapping the active tab (or Map) closes it. Details in `js/mobile.js` and the `@media (max-width: 768px)`
+block in `css/style.css`:
+
+- The control bar stays pinned at the top, compact (icons + switches), with 44px tap targets.
+- The chat opens as a partial sheet so it never covers the whole map; picking a country from the
+  Countries sheet closes it and flies there, and a badge on the Chat tab marks an active room.
+- Opening the keyboard raises the chat sheet so the input stays above it and hides the tab bar; text
+  inputs are 16px to stop iOS focus-zoom. Layout is right-to-left in Arabic.
+- The desktop layout is unchanged above 768px; the map's own pinch-zoom and drag are used on touch
+  (the viewport is `user-scalable=no`, so the browser does not intercept pinch gestures).
 
 ## Country chat (Supabase)
 
@@ -35,6 +50,13 @@ Each country is a chat room. Everyone can read; sending needs a Google sign-in d
 box. The room follows the selected country; if you are already in a room, a **Stay / Switch Room**
 dialog asks first. The header shows how many people are subscribed to the room (Supabase Presence),
 and the bottom-centre pill counts every open tab on the site, signed in or not.
+
+### First-sign-in Discord tooltip
+
+The first time a signed-in user has an active room, a one-time spotlight (`js/onboarding.js`) dims the
+screen except for the footer **Discord** icon and shows a localized card inviting them to continue on
+Discord (`https://discord.gg/95aRvpFem`). Dismissing it sets `localStorage['geoscope.discordGuide']`,
+so it never shows again on that browser. Text and button are translated for EN / AR / FR / ES.
 
 ### Delivery is location-independent
 

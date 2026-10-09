@@ -37,6 +37,46 @@
 
   tabBtns.forEach(b => b.addEventListener('click', () => setSheet(b.dataset.sheet)));
 
+  // ---- swipe the open sheet down (from its handle / header) to dismiss it ----
+  // The visible drag handle now does something: a downward drag or flick closes the sheet, so you
+  // no longer have to tap "Map" to get back. Dragging only starts in the top header zone, leaving
+  // the scrollable list / chat body untouched.
+  function enableSwipeDismiss() {
+    [['#overlayPanel', 'overlay'], ['.panel--right', 'dir'], ['#chatPanel', 'chat']].forEach(([sel, sheet]) => {
+      const panel = document.querySelector(sel);
+      if (!panel) return;
+      let startY = 0, dy = 0, t0 = 0, dragging = false;
+
+      panel.addEventListener('touchstart', e => {
+        if (!mq.matches || currentSheet() !== sheet || e.touches.length !== 1) return;
+        const y = e.touches[0].clientY;
+        // only grab the gesture in the top ~64px (handle + header), so inner scrolling still works
+        if (y - panel.getBoundingClientRect().top > 64) return;
+        startY = y; dy = 0; t0 = Date.now(); dragging = true;
+        panel.style.transition = 'none';
+      }, { passive: true });
+
+      panel.addEventListener('touchmove', e => {
+        if (!dragging) return;
+        dy = Math.max(0, e.touches[0].clientY - startY);   // track downward movement only
+        panel.style.transform = 'translateY(' + dy + 'px)';
+        if (dy > 4 && e.cancelable) e.preventDefault();     // claim the gesture from the map/page
+      }, { passive: false });
+
+      function end() {
+        if (!dragging) return;
+        dragging = false;
+        panel.style.transition = '';
+        panel.style.transform = '';                         // hand control back to the CSS classes
+        const flick = dy > 40 && (Date.now() - t0) < 250;
+        if (dy > 90 || flick) setSheet('none');             // past threshold or a quick flick → close
+      }
+      panel.addEventListener('touchend', end);
+      panel.addEventListener('touchcancel', end);
+    });
+  }
+  enableSwipeDismiss();
+
   // ---- live chat badge on the Chat tab: a room is active but the chat sheet is closed ----
   function updateBadge() {
     if (!chatBadge) return;

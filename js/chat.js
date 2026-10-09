@@ -14,7 +14,10 @@ window.Chat = (function () {
   const MAX_LEN = 500;
   const HISTORY = 100;
   const SEND_INTERVAL = 1000;
-  const POLL_INTERVAL = 3000;   // REST fallback: how often to poll a room for new messages
+  const POLL_INTERVAL = 3000;   // REST fallback cadence while the websocket is down
+  const BACKUP_INTERVAL = 7000; // slow safety-net poll kept running even when the websocket IS up,
+                                //   because some mobile networks keep the socket "joined" yet stop
+                                //   delivering INSERTs; this makes messages arrive without a refresh
   const WS_WATCHDOG = 3500;     // if the realtime socket has not joined by now, start polling anyway
   const $ = s => document.querySelector(s);
 
@@ -257,12 +260,20 @@ window.Chat = (function () {
       (data || []).forEach(appendMessage);
     } catch (e) { /* transient network error; the next tick retries */ }
   }
-  function startPolling(a2, token) {
-    if (roomPoll || token !== joinToken) return;
-    roomPoll = setInterval(() => pollOnce(a2, token), POLL_INTERVAL);
+  let pollEveryMs = 0;     // current polling cadence, so we only re-arm the timer when it changes
+  function startPolling(a2, token, interval) {
+    if (token !== joinToken) return;
+    interval = interval || POLL_INTERVAL;
+    if (roomPoll && pollEveryMs === interval) return;   // already polling at this cadence
+    if (roomPoll) clearInterval(roomPoll);
+    pollEveryMs = interval;
+    roomPoll = setInterval(() => pollOnce(a2, token), interval);
     pollOnce(a2, token);   // fetch immediately, don't wait a whole interval
   }
-  function stopPolling() { if (roomPoll) { clearInterval(roomPoll); roomPoll = null; } }
+  function stopPolling() { if (roomPoll) { clearInterval(roomPoll); roomPoll = null; } pollEveryMs = 0; }
+  // Immediate catch-up read — used when the tab returns to the foreground or the network comes
+  // back, the two moments a backgrounded socket/timer on a phone most often misses messages.
+  function catchUp() { if (configured && room) pollOnce(room.a2, joinToken); }
   function failSend(tempId) {
     const i = pendingSends.findIndex(x => x.tempId === tempId);
     if (i < 0) return;
@@ -322,21 +333,23 @@ window.Chat = (function () {
         if (token !== joinToken) return;
         if (st === 'SUBSCRIBED') {
           wsJoined = true;
-          stopPolling();                 // realtime is primary; drop the REST fallback
-          pollOnce(a2, token);           // one catch-up read for anything missed while connecting
+          // Realtime is primary, but keep a slow safety-net poll running: on some mobile networks
+          // the socket stays "joined" while INSERTs stop arriving, and without this the user would
+          // have to refresh to see new messages (the exact bug reported on phones).
+          startPolling(a2, token, BACKUP_INTERVAL);
           status('');
           try { await roomChannel.track({ at: new Date().toISOString(), uid: user ? user.id : null }); } catch (e) { /* ignore */ }
         } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') {
           // websocket failed or dropped (common for some international/mobile networks):
-          // fall back to REST polling so messages still flow, without alarming the user.
+          // fall back to fast REST polling so messages still flow, without alarming the user.
           wsJoined = false;
-          startPolling(a2, token);
+          startPolling(a2, token, POLL_INTERVAL);
         }
       });
 
     // 3) watchdog: if the socket has not joined shortly, start polling anyway so reception is
     //    never blocked by a slow or blocked websocket handshake.
-    setTimeout(() => { if (token === joinToken && !wsJoined) startPolling(a2, token); }, WS_WATCHDOG);
+    setTimeout(() => { if (token === joinToken && !wsJoined) startPolling(a2, token, POLL_INTERVAL); }, WS_WATCHDOG);
 
     signalChatReady();   // signed-in user now has a room → onboarding may run
   }
@@ -481,6 +494,11 @@ window.Chat = (function () {
     joinSite();
     renderHeader();
     renderAuth();
+    // A phone that was locked or had the tab backgrounded often misses socket pushes and throttles
+    // the poll timer; pull missed messages the instant it comes back, so no manual refresh is needed.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) catchUp(); });
+    window.addEventListener('focus', catchUp);
+    window.addEventListener('online', catchUp);
     // clean the OAuth fragment/query left by the redirect
     if (/[?#].*(access_token|code=)/.test(location.href)) history.replaceState(null, '', location.pathname);
   }
